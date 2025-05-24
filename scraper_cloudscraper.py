@@ -1,41 +1,34 @@
 import os
-import requests
-from bs4 import BeautifulSoup
-import pdfkit
 import time
 import random
+import cloudscraper
+from bs4 import BeautifulSoup
+import pdfkit
 
+# Configuration
 REFERENCE_PAGE = "https://www.patreon.com/posts/frequently-asked-43097481"
 OUTPUT_DIR = "output"
 
-# User agent to mimic a browser
-USER_AGENTS = [
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Safari/605.1.15',
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0'
-]
-
-# Create headers for our requests
-def get_headers():
-    return {
-        'User-Agent': random.choice(USER_AGENTS),
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-        'Connection': 'keep-alive',
-        'Upgrade-Insecure-Requests': '1',
-        'Pragma': 'no-cache',
-        'Cache-Control': 'no-cache',
-    }
-
+# Ensure output directory exists
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 def get_post_links(reference_url):
+    """Get all post links from the reference page using cloudscraper"""
     print(f"Fetching links from: {reference_url}")
+    
     try:
-        resp = requests.get(reference_url, headers=get_headers(), timeout=30)
+        # Create a cloudscraper session
+        scraper = cloudscraper.create_scraper(delay=10, browser={
+            'browser': 'chrome',
+            'platform': 'windows',
+            'desktop': True
+        })
+        
+        # Get the page content
+        resp = scraper.get(reference_url)
         print(f"Response status code: {resp.status_code}")
         
-        # Save the HTML to a file for inspection
+        # Save the HTML for inspection
         with open(os.path.join(OUTPUT_DIR, "reference_page.html"), "w", encoding="utf-8") as f:
             f.write(resp.text)
         print(f"Saved reference page HTML for inspection to {os.path.join(OUTPUT_DIR, 'reference_page.html')}")
@@ -45,38 +38,46 @@ def get_post_links(reference_url):
             print(f"Response: {resp.text[:500]}...")
             return []
             
+        # Parse the HTML
         soup = BeautifulSoup(resp.content, "html.parser")
         links = []
         
-        # This code snippet is iterating over all `<a>` tags in the HTML content parsed by BeautifulSoup.
-        # For each `<a>` tag, it is extracting the value of the `href` attribute and checking if it
-        # contains the substring "patreon.com/posts/". If the condition is met, it adds that URL to the
-        # `links` list. This process helps in extracting all the post links from the Patreon page that are
-        # relevant for further processing.
+        # Extract all Patreon post links
         for a in soup.find_all("a", href=True):
             href = a["href"]
             if "patreon.com/posts/" in href:
                 links.append(href)
         
-        print(f"Found {len(links)} links (before deduplication)")
+        # Deduplicate links
         unique_links = list(set(links))
-        print(f"Found {len(unique_links)} unique links")
-        return unique_links  # deduplicate
+        print(f"Found {len(unique_links)} unique post links")
+        return unique_links
+        
     except Exception as e:
         print(f"Error fetching post links: {str(e)}")
         return []
 
-def fetch_post_content(url):
+def fetch_post_content(url, scraper=None):
+    """Fetch post content using cloudscraper"""
     print(f"Fetching content from: {url}")
     
     # Add delay to avoid rate limiting
     time.sleep(random.uniform(2, 5))
     
     try:
-        resp = requests.get(url, headers=get_headers(), timeout=30)
+        # Create a new scraper if one wasn't provided
+        if not scraper:
+            scraper = cloudscraper.create_scraper(delay=10, browser={
+                'browser': 'chrome',
+                'platform': 'windows',
+                'desktop': True
+            })
+        
+        # Get the page content
+        resp = scraper.get(url)
         print(f"Response status code: {resp.status_code}")
         
-        # Save the HTML to a file for inspection
+        # Save the HTML for inspection
         page_name = url.split('/')[-1]
         html_filename = f"{page_name}.html"
         with open(os.path.join(OUTPUT_DIR, html_filename), "w", encoding="utf-8") as f:
@@ -87,13 +88,14 @@ def fetch_post_content(url):
             print(f"Failed to fetch post: {resp.status_code}")
             return None, None
             
+        # Parse the HTML
         soup = BeautifulSoup(resp.content, "html.parser")
         
-        # Debug HTML structure - limit to 10 divs to avoid overwhelming output
+        # Print a sample of div classes to help identify the content
         print("Sample of HTML classes in the page:")
         for i, div in enumerate(soup.find_all("div", class_=True)):
             if i < 10:  # Only print first 10 classes
-                print(f"Found div with class: {div['class']}")
+                print(f"Found div with class: {div.get('class', '')}")
             else:
                 break
         
@@ -182,6 +184,7 @@ def fetch_post_content(url):
         return None, None
 
 def save_pdf(title, html_content):
+    """Save HTML content as PDF"""
     if not html_content:
         print("No HTML content to save")
         return
@@ -208,15 +211,24 @@ def save_pdf(title, html_content):
 
 def main():
     try:
+        # Create a cloudscraper session to reuse across requests
+        scraper = cloudscraper.create_scraper(delay=10, browser={
+            'browser': 'chrome',
+            'platform': 'windows',
+            'desktop': True
+        })
+        
+        # Get all post links
         links = get_post_links(REFERENCE_PAGE)
         if not links:
             print("No links found. Exiting.")
             return
             
+        # Process each link
         for i, link in enumerate(links):
             print(f"\nProcessing link {i+1}/{len(links)}: {link}")
             try:
-                title, content = fetch_post_content(link)
+                title, content = fetch_post_content(link, scraper)
                 if title and content:
                     print(f"Saving: {title}")
                     save_pdf(title, content)
@@ -225,8 +237,9 @@ def main():
             except Exception as e:
                 print(f"Error processing link {link}: {str(e)}")
                 continue
+                
     except Exception as e:
         print(f"Main error: {str(e)}")
 
 if __name__ == "__main__":
-    main()
+    main() 

@@ -2,6 +2,10 @@
 
 A Python bot that scrapes public posts from a Patreon blog and saves each post as a formatted PDF. This tool is designed to help you collect, archive, and later summarize or study Patreon blog content by uploading the resulting PDFs to an LLM chat or note-taking tool.
 
+## Current Status
+
+**NOTE: This script currently encounters a Cloudflare protection challenge when trying to access Patreon. The simple requests-based approach is not sufficient for bypassing this protection.**
+
 ## Features
 
 - Scrapes post links from a specified Patreon index/reference page.
@@ -28,6 +32,47 @@ Ideal for students, researchers, or creators who want to archive Patreon blog co
 - [beautifulsoup4](https://pypi.org/project/beautifulsoup4/)
 - [pdfkit](https://pypi.org/project/pdfkit/) (requires [wkhtmltopdf](https://wkhtmltopdf.org/))
   - Alternative: [fpdf2](https://pypi.org/project/fpdf2/) or [reportlab](https://pypi.org/project/reportlab/)
+
+## Dealing with Cloudflare Protection
+
+Patreon uses Cloudflare to protect against automated scrapers. To bypass this protection, you'd need to:
+
+1. **Use a headless browser**: Replace the simple `requests` approach with Selenium or Playwright which can execute JavaScript and solve Cloudflare challenges
+2. **Consider the API**: Check if Patreon offers an official API for accessing content
+3. **Use specialized libraries**: Libraries like `cloudscraper` are designed specifically to bypass Cloudflare, but success may vary
+
+### Option 1: Using Selenium (Recommended for Learning)
+
+To install Selenium and continue with this approach:
+
+```bash
+pip install selenium webdriver-manager
+```
+
+You would then modify the script to use Selenium instead of requests. Example:
+
+```python
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
+
+# Setup browser
+options = Options()
+options.add_argument("--headless")  # Run without opening a window
+driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+
+# Visit page
+driver.get(REFERENCE_PAGE)
+# Wait for Cloudflare to resolve
+time.sleep(10)  # Adjust as needed
+
+# Now the page should be loaded
+html = driver.page_source
+soup = BeautifulSoup(html, "html.parser")
+# Continue with your scraping logic...
+```
 
 ## Installation
 
@@ -63,6 +108,7 @@ All PDFs will be saved in the `output` directory (or as specified).
 ## Example
 
 The following reference page is supported:
+
 - https://www.patreon.com/posts/frequently-asked-43097481
 
 ## License
@@ -72,4 +118,6 @@ MIT License
 ## Disclaimer
 
 - Only works with public Patreon posts.
-- For personal or educational use. Please respect content creators’ terms and Patreon’s policies.
+- For personal or educational use. Please respect content creators' terms and Patreon's policies.
+- Web scraping may violate terms of service. Use responsibly and consider official APIs when available.
+- This script is for educational purposes to demonstrate web scraping techniques.
