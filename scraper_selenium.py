@@ -15,6 +15,11 @@ import pdfkit
 REFERENCE_PAGE = "https://www.patreon.com/posts/frequently-asked-43097481"
 OUTPUT_DIR = "output"
 
+# !!! IMPORTANT: UPDATE THIS PATH !!!
+# Find the path to your wkhtmltopdf.exe installation
+# Example: WKHTMLTOPDF_PATH = r"C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe"
+WKHTMLTOPDF_PATH = r"C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe"
+
 # Ensure output directory exists
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
@@ -204,27 +209,63 @@ def fetch_post_content(driver, url):
         print(f"Error processing content: {str(e)}")
         return None, None
 
+def sanitize_filename(filename):
+    """Remove or replace characters that are invalid in Windows filenames."""
+    # Characters to remove/replace: \ / : * ? " < > |
+    # Replace / with - (already done in title extraction, but good to be safe)
+    # Replace others with _ or remove them
+    
+    # Remove leading/trailing whitespace
+    filename = filename.strip()
+    
+    # Replace problematic characters
+    filename = filename.replace('|', '_')
+    filename = filename.replace(':', '_')
+    filename = filename.replace('?', '') # Often removed
+    filename = filename.replace('*', '')
+    filename = filename.replace('<', '_')
+    filename = filename.replace('>', '_')
+    filename = filename.replace('"', "'") # Replace double quotes with single
+    filename = filename.replace('\\', '_') # Replace backslash
+    filename = filename.replace('/', '-')   # Ensure forward slash is also handled
+    
+    # Limit filename length (common practice, though OS limits are usually higher)
+    # Taking into account the .html or .pdf extension
+    max_len = 250 # A bit less than typical max path component length
+    if len(filename) > max_len - 5: # -5 for .html or .pdf
+        filename = filename[:max_len - 5]
+        
+    return filename
+
 def save_pdf(title, html_content):
     """Save HTML content as PDF"""
     if not html_content:
         print("No HTML content to save")
         return
     
+    sanitized_title = sanitize_filename(title)
+    
     # Save the HTML file first for inspection
-    html_filename = f"{title[:50]}.html"
+    html_filename = f"{sanitized_title[:50]}.html" # Use sanitized_title
     html_path = os.path.join(OUTPUT_DIR, html_filename)
     
-    with open(html_path, "w", encoding="utf-8") as f:
-        f.write(html_content)
-    print(f"Saved HTML to: {html_path}")
-    
+    try: # Add try-except for file writing
+        with open(html_path, "w", encoding="utf-8") as f:
+            f.write(html_content)
+        print(f"Saved HTML to: {html_path}")
+    except Exception as e:
+        print(f"Error saving HTML file {html_path}: {str(e)}")
+        return # Don't proceed to PDF if HTML saving failed
+
     # Now convert to PDF
-    filename = f"{title[:50]}.pdf"
-    output_path = os.path.join(OUTPUT_DIR, filename)
+    pdf_filename = f"{sanitized_title[:50]}.pdf" # Use sanitized_title
+    output_path = os.path.join(OUTPUT_DIR, pdf_filename)
     print(f"Saving PDF to: {output_path}")
     
     try:
-        pdfkit.from_string(html_content, output_path)
+        # Pass the configuration to pdfkit
+        config = pdfkit.configuration(wkhtmltopdf=WKHTMLTOPDF_PATH)
+        pdfkit.from_string(html_content, output_path, configuration=config)
         print("PDF saved successfully")
     except Exception as e:
         print(f"Error saving PDF: {str(e)}")

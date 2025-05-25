@@ -4,3 +4,4 @@ pdfkit
 selenium
 webdriver-manager
 cloudscraper  # Optional: specialized library for bypassing Cloudflare
+pypdf
